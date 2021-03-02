@@ -14,22 +14,12 @@ struct InterpreterContext  {
 }
 
 #[derive(Debug)]
-struct MemCellRelatedError {
-    cell_index: usize,
-    script_pos: usize,
-}
-
-#[derive(Debug)]
-struct PositionalError {
-    script_pos : usize,
-}
-
 enum ExecutionError{
-    MemCellAccessOutOfBounds(MemCellRelatedError),
-    MemCellValueOverflow(MemCellRelatedError),
-    MemCellValueUnderflow(MemCellRelatedError),
-    UnexpectedCycleEnd(PositionalError),
-    IOError(PositionalError),
+    MemCellAccessOutOfBounds{cell_idx: usize, script_pos: usize},
+    MemCellValueOverflow{cell_idx: usize, script_pos: usize},
+    MemCellValueUnderflow{cell_idx: usize, script_pos: usize},
+    UnexpectedCycleEnd{script_pos: usize},
+    IOError{script_pos: usize},
 }
 
 impl InterpreterContext {
@@ -42,22 +32,12 @@ impl InterpreterContext {
         }
     }
 
-    fn mem_cell_err(&self) -> MemCellRelatedError {
-        MemCellRelatedError{
-            cell_index: self.mem_cell_index,
-            script_pos: self.script_cursor,
-        }
-    }
-
-    fn pos_err(&self) -> PositionalError {
-        PositionalError{
-            script_pos: self.script_cursor,
-        }
-    }
-
     fn check_out_of_bounds_access(&self) -> Result<(), ExecutionError> {
         if self.mem_cell_index >= MAX_MEM_CELL_COUNT {
-            return Err(ExecutionError::MemCellAccessOutOfBounds(self.mem_cell_err()));
+            return Err(ExecutionError::MemCellAccessOutOfBounds{
+                cell_idx: self.mem_cell_index, 
+                script_pos: self.script_cursor,
+            });
         }
         Ok(())
     }
@@ -67,7 +47,10 @@ impl InterpreterContext {
         let cur_cell = &mut self.memory[self.mem_cell_index];
         match cur_cell.checked_add(1) {
             Some(v) => *cur_cell = v,
-            None => return Err(ExecutionError::MemCellValueOverflow(self.mem_cell_err()))
+            None => return Err(ExecutionError::MemCellValueOverflow{
+                cell_idx: self.mem_cell_index, 
+                script_pos: self.script_cursor,
+            })
         }
         Ok(())
     }
@@ -77,7 +60,10 @@ impl InterpreterContext {
         let cur_cell = &mut self.memory[self.mem_cell_index];
         match cur_cell.checked_sub(1) {
             Some(v) => *cur_cell = v,
-            None => return Err(ExecutionError::MemCellValueUnderflow(self.mem_cell_err()))
+            None => return Err(ExecutionError::MemCellValueUnderflow{
+                cell_idx: self.mem_cell_index, 
+                script_pos: self.script_cursor,
+            })
         }
         Ok(())
     }
@@ -92,7 +78,9 @@ impl InterpreterContext {
         self.check_out_of_bounds_access()?;   
         match get_one_byte_from_stdin() {
             Some(c) => self.memory[self.mem_cell_index] = c,
-            None => return Err(ExecutionError::IOError(self.pos_err()))
+            None => return Err(ExecutionError::IOError{
+                script_pos: self.script_cursor
+            })
         }
         Ok(())
     }
@@ -121,7 +109,9 @@ impl InterpreterContext {
                     if !self.cycle_stack.is_empty() {
                         self.script_cursor = self.cycle_stack.pop().unwrap() - 1;
                     } else {
-                        return Err(ExecutionError::UnexpectedCycleEnd(self.pos_err()));
+                        return Err(ExecutionError::UnexpectedCycleEnd{
+                            script_pos: self.script_cursor
+                        });
                     }
                 },
                 _ => {}
@@ -149,17 +139,11 @@ fn get_one_byte_from_stdin() -> Option<i8> {
         .map(|byte| byte as i8)
 }
 
-fn main() {
+fn main() -> io::Result<()> {
     match env::args().nth(1) {
         Some(arg) => {
             let script_str = {
-                let script_file = match fs::File::open(arg.as_str()) {
-                    Ok(file) => file,
-                    Err(e) => {
-                        println!("Couldn't open file {}, error: {}", arg, e);
-                        return;
-                    }
-                };
+                let script_file = fs::File::open(arg.as_str())?;
                 let mut reader = io::BufReader::new(script_file);
                 let mut content = String::new();
                 reader.read_to_string(&mut content).unwrap();
@@ -168,16 +152,11 @@ fn main() {
 
             let mut context = InterpreterContext::new();
             match context.execute_from_start(script_str.as_str()) {
-                Ok(()) => println!("Executted successfully. Exitting..."),
-                Err(e) => match e {
-                    ExecutionError::MemCellAccessOutOfBounds(err) => println!("MemCellAccessOutOfBounds Error. {:?}", err),
-                    ExecutionError::MemCellValueOverflow(err) => println!("MemCellValueOverflow Error. {:?}", err),
-                    ExecutionError::MemCellValueUnderflow(err) => println!("MemCellValueUnderflow Error. {:?}", err),
-                    ExecutionError::UnexpectedCycleEnd(err) => println!("UnexpectedCycleEnd Error. {:?}", err),
-                    ExecutionError::IOError(err) => println!("IOError Error. Couldn't read from the terminal. {:?}", err),
-                }
+                Ok(()) => println!("\nExecutted successfully. Exitting..."),
+                Err(e) => println!("\nError {:?} occured!", e),
             }
         }
         None => println!("Error: Expected to get a script filename as an argument!")
     }
+    Ok(())
 }

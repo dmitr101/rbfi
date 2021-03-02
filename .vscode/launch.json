@@ -19,7 +19,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["samples/hello_smart.bf"],
+            "args": ["samples/hello_broken.bf"],
             "cwd": "${workspaceFolder}"
         },
         {
