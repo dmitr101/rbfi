@@ -140,23 +140,22 @@ fn get_one_byte_from_stdin() -> Option<i8> {
 }
 
 fn main() -> io::Result<()> {
-    match env::args().nth(1) {
-        Some(arg) => {
-            let script_str = {
-                let script_file = fs::File::open(arg.as_str())?;
-                let mut reader = io::BufReader::new(script_file);
-                let mut content = String::new();
-                reader.read_to_string(&mut content).unwrap();
-                content
-            };
+    if let Some(arg) = env::args().nth(1) {
+        let script_str = {
+            let script_file = fs::File::open(arg.as_str())?;
+            let mut reader = io::BufReader::new(script_file);
+            let mut content = String::new();
+            reader.read_to_string(&mut content).unwrap();
+            content
+        };
 
-            let mut context = InterpreterContext::new();
-            match context.execute_from_start(script_str.as_str()) {
-                Ok(()) => println!("\nExecutted successfully. Exitting..."),
-                Err(e) => println!("\nError {:?} occured!", e),
-            }
+        let mut context = InterpreterContext::new();
+        match context.execute_from_start(script_str.as_str()) {
+            Ok(()) => println!("\nExecutted successfully. Exitting..."),
+            Err(e) => println!("\nError {:?} occured!", e),
         }
-        None => println!("Error: Expected to get a script filename as an argument!")
+    } else {
+        println!("Error: Expected to get a script filename as an argument!")
     }
     Ok(())
 }
